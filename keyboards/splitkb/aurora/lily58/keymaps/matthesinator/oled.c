@@ -4,14 +4,15 @@
 #include "oled.h"
 #include "encoder.h"
 
-uint32_t timeout_timer;
-bool timed_out = false;
+uint32_t oled_timeout_timer;
+bool oled_timed_out = false;
 
+void draw_encoder_mode(void);
+
+/*
+    Updates the left (/master) OLED display. Draws info graphics for the current modifiers, lock states and layer info.
+*/
 void update_left_display() {
-    if (!is_keyboard_master()) {
-        return;
-    }
-
     // 'alt - inv', 14x14px
     static const char PROGMEM alt_inv[] = {
         0xfc, 0xfe, 0x0f, 0xef, 0x0f, 0xff, 0x0f, 0xff, 0xff, 0xef, 0x0f, 0xef, 0xfe, 0xfc, 0x0f, 0x1f, 0x3c, 0x3e,
@@ -144,11 +145,28 @@ void update_left_display() {
     oled_render_dirty(true);
 }
 
-void update_right_display_mode() {
-    if (is_keyboard_master()) {
-        return;
-    }
+/*
+    Updates the right (/slave) OLED display. Prints the available settings if settings mode is enabled, or delegates to
+    #draw_encoder_mode.
+*/
+void update_right_display() {
+    if (using_modes) {
+        draw_encoder_mode();
+    } else {
+        oled_clear();
+        oled_write_ln("SETT", false);
+        oled_write_ln("", false);
 
+        for (int i = 0; i < setting_count; i++) {
+            oled_write_ln(encoder_settings[i], enc_setting == i);
+        }
+    }
+}
+
+/*
+    Draws info graphics for the currently selected operating mode for the right encoder.
+*/
+void draw_encoder_mode() {
     static const char PROGMEM arrows[] = {
         // 'arrows', 14x14px
         0xfc, 0x02, 0x11, 0x11, 0x91, 0x11, 0x11, 0x11, 0x11, 0x7d, 0x39, 0x11, 0x02, 0xfc, 0x0f, 0x10,
@@ -221,43 +239,41 @@ void update_right_display_mode() {
     oled_render_dirty(true);
 }
 
-void update_right_display_setting() {
-    if (is_keyboard_master()) {
-        return;
-    }
-    oled_clear();
-    oled_write_ln("SETT", false);
-    oled_write_ln("", false);
-
-    for (int i = 0; i < setting_count; i++) {
-        oled_write_ln(encoder_settings[i], enc_setting == i);
-    }
-}
-
+/*
+    Reset the OLED timeout. Should be called whenever the user takes any action on the keyboard.
+*/
 void reset_oled_timeout() {
-    timeout_timer = timer_read32();
-    timed_out = false;
-    set_timeout_msg data = {timed_out};
+    oled_timeout_timer = timer_read32();
+    oled_timed_out = false;
+    set_timeout_msg data = {oled_timed_out};
     transaction_rpc_send(SET_TIMEOUT, sizeof(data), &data);
 }
 
+/*
+    RPC on the slave side to set the OLED timeout state.
+*/
 void set_timeout_rpc(uint8_t buf_len, const void* in_data, uint8_t out_buflen, void* out_data) {
     const set_timeout_msg *data = (const set_timeout_msg*) in_data;
-    timed_out = data->timeout;
+    oled_timed_out = data->timeout;
 
-    if (timed_out) {
+    if (oled_timed_out) {
         oled_clear();
     }
 }
 
+/*
+    Checks whether the OLED has timed out since the last time #reset_oled_timeout was called. Once timeout is activated,
+    it skips the check (and especially the RPC call) as to not slow the matrix scan down.
+*/
 void check_oled_timeout() {
-    if (timed_out) {
+    if (oled_timed_out) {
         return;
     }
-    if (timer_elapsed32(timeout_timer) > TIMEOUT_SECONDS * 1000) {
+    uint32_t timeout_seconds = TIMEOUT_SECONDS;
+    if (timer_elapsed32(oled_timeout_timer) > timeout_seconds * 1000) {
         oled_clear();
-        timed_out = true;
-        set_timeout_msg data = {timed_out};
+        oled_timed_out = true;
+        set_timeout_msg data = {oled_timed_out};
         transaction_rpc_send(SET_TIMEOUT, sizeof(data), &data);
     }
 }

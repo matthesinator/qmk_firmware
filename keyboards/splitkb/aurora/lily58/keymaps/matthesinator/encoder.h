@@ -2,16 +2,16 @@
 #include QMK_KEYBOARD_H
 
 #define PAGE_LENGTH 3 // Entries per page on right oled
-#define HOLD_LENGTH 500 // How many ms a button needs to be held
+#define ENCODER_HOLD_LENGTH 500 // How many ms the encoder needs to be pressed to switch to settings
 
-enum encoder_mode { // TODO: Remove enum to have array as single source of truth
+enum encoder_mode {
     HISTORY,
     SCROLL,
     ZOOM,
     BRIGHTNESS,
 };
 
-enum encoder_setting {
+enum encoder_setting { // TODO: Remove enum to have array as single source of truth
     LED_STATE,
     LED_BRIGHTNESS,
     LED_COLOR,
@@ -33,7 +33,6 @@ extern const char* encoder_settings[];
 extern int setting_count;
 
 
-void encoder_update_mode(bool clockwise);
-void encoder_update_setting(bool clockwise);
+void fire_encoder_event(bool clockwise);
 void change_encoder_mode(bool switch_modes);
 void update_enc_display_rpc(uint8_t buf_len, const void* in_data, uint8_t out_buflen, void* out_data);

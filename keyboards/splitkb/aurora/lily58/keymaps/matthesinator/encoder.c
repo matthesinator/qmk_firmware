@@ -11,6 +11,23 @@ bool using_modes = true;
 int setting_count = sizeof(encoder_settings) / sizeof(encoder_settings[0]);
 uint16_t press_time = 0;
 
+void encoder_update_mode(bool clockwise);
+void encoder_update_setting(bool clockwise);
+/*
+    Fire the encoder event.
+    Delegates to #encoder_update_mode or #encoder_update_settings depending on which mode is active.
+*/
+void fire_encoder_event(bool clockwise) {
+    if (using_modes) {
+        encoder_update_mode(clockwise);
+    } else {
+        encoder_update_setting(clockwise);
+    }
+}
+
+/*
+    Send the corresponding key press for the selected mode and direction.
+*/
 void encoder_update_mode(bool clockwise) {
     if (clockwise) {
         switch (enc_mode) {
@@ -45,6 +62,10 @@ void encoder_update_mode(bool clockwise) {
     }
 }
 
+/*
+    Update the keyboard settings.
+    Updates the setting depending on the selected setting and direction.
+*/
 void encoder_update_setting(bool clockwise) {
     if (clockwise) {
         switch (enc_setting) {
@@ -83,6 +104,9 @@ void encoder_update_setting(bool clockwise) {
     }
 }
 
+/*
+    Changes the encoders current mode and switches between modes and settings. Sends an RPC call to the slave.
+*/
 void change_encoder_mode(bool switch_modes) {
     if (switch_modes) {
         using_modes = !using_modes;
@@ -94,25 +118,23 @@ void change_encoder_mode(bool switch_modes) {
     if (using_modes) {
         enc_mode += 1;
         enc_mode %= 4;
-        update_right_display_mode();
     } else {
         enc_setting += 1;
         enc_setting %= setting_count;
-        update_right_display_setting();
     }
+    update_right_display();
 
     enc_mode_msg data = {using_modes, enc_mode, enc_setting};
     transaction_rpc_send(ENC_MODE, sizeof(data), &data);
 }
 
+/*
+    RPC on the slave to update the current encoder mode.
+*/
 void update_enc_display_rpc(uint8_t buf_len, const void* in_data, uint8_t out_buflen, void* out_data) {
     const enc_mode_msg *data = (const enc_mode_msg*) in_data;
     using_modes = data->using_mode;
     enc_mode = data->mode;
     enc_setting = data->setting;
-    if (data->using_mode) {
-        update_right_display_mode();
-    } else {
-        update_right_display_setting();
-    }
+    update_right_display();
 }
