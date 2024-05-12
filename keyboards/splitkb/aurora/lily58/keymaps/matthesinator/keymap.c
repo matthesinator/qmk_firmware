@@ -1,10 +1,10 @@
 #include QMK_KEYBOARD_H
 #include <string.h>
-#include <timer.h>
 #include "transactions.h"
-#include "oled.c"
+#include "oled.h"
+#include "encoder.h"
 
-#define MODS_SHIFT_MASK  (MOD_BIT(KC_LSFT)|MOD_BIT(KC_RSFT))
+#define MODS_SHIFT_MASK (MOD_BIT(KC_LSFT)|MOD_BIT(KC_RSFT))
 #define SHIFTED get_mods()&MODS_SHIFT_MASK
 #define CAPS_ON host_keyboard_led_state().caps_lock
 #define NUM_LOCK_ON host_keyboard_led_state().num_lock
@@ -16,16 +16,13 @@
 #define _OPTS 3 // Options layer
 #define _QUIC 4 // Quicksettings layer
 
-#define PAGE_LENGTH 3 // Entries per page on right oled
-#define HOLD_LENGTH 500 // How many ms a button needs to be held
-#define TIMEOUT_SECONDS 10
+
 
 
 /**********************************************************/
 /*                       VARIABLES                        */
 /**********************************************************/
-static uint32_t timeout_timer;
-static bool timed_out = false;
+
 
 enum my_keycodes {
     KX_WIN = SAFE_RANGE,
@@ -37,29 +34,6 @@ enum my_keycodes {
     KX_SS,      // ẞ: U+1E9E/ALT+7838    ß: U+00DF/ALT+225
     KX_EURO     // €: U+20AC/ALT+0128
 };
-
-enum encoder_mode { // TODO: Remove enum to have array as single source of truth
-    HISTORY,
-    SCROLL,
-    ZOOM,
-    BRIGHTNESS,
-};
-
-enum encoder_setting {
-    LED_STATE,
-    LED_BRIGHTNESS,
-    LED_COLOR,
-    LED_SATURATION,
-    LED_MODE,
-};
-
-const char* encoder_settings[] = {"Tgl", "Brig", "Clr", "Sat", "Mode"};
-
-enum encoder_mode enc_mode = HISTORY;
-enum encoder_setting enc_setting = LED_STATE;
-bool using_modes = true;
-int setting_count = sizeof(encoder_settings) / sizeof(encoder_settings[0]);
-uint16_t press_time = 0;
 
 struct special_character {
     uint8_t unicode_sequence[4];
@@ -83,15 +57,8 @@ enum operating_system {
 
 enum operating_system os_mode = WINDOWS;
 
-typedef struct _enc_mode_msg {
-    bool using_mode;
-    enum encoder_mode mode;
-    enum encoder_setting setting;
-} enc_mode_msg;
 
-typedef struct _set_timeout_msg {
-    bool timeout;
-} set_timeout_msg;
+
 
 
 
@@ -144,84 +111,6 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 // TODO: Set up left-dominant gaming layer
 
 #ifdef ENCODER_ENABLE
-void encoder_update_mode(bool clockwise) {
-    if (clockwise) {
-        switch (enc_mode) {
-            case HISTORY:
-                tap_code16(C(KC_Y));
-                break;
-            case SCROLL:
-                tap_code(KC_MS_WH_DOWN);
-                break;
-            case ZOOM:
-                tap_code16(S(C(KC_EQL)));
-                break;
-            case BRIGHTNESS:
-                rgb_matrix_increase_val();
-                break;
-        }
-    } else {
-        switch (enc_mode) {
-            case HISTORY:
-                tap_code16(C(KC_Z));
-                break;
-            case SCROLL:
-                tap_code(KC_MS_WH_UP);
-                break;
-            case ZOOM:
-                tap_code16(C(KC_MINS));
-                break;
-            case BRIGHTNESS:
-                rgb_matrix_decrease_val();
-                break;
-        }
-    }
-}
-
-void encoder_update_setting(bool clockwise) {
-    if (clockwise) {
-        switch (enc_setting) {
-            case LED_STATE:
-                rgb_matrix_enable();
-                break;
-            case LED_BRIGHTNESS:
-                rgb_matrix_increase_val();
-                break;
-            case LED_COLOR:
-                rgb_matrix_increase_hue();
-                break;
-            case LED_SATURATION:
-                rgb_matrix_increase_sat();
-                break;
-            case LED_MODE:
-                break;
-        }
-    } else {
-        switch (enc_setting) {
-            case LED_STATE:
-                rgb_matrix_disable();
-                break;
-            case LED_BRIGHTNESS:
-                rgb_matrix_decrease_val();
-                break;
-            case LED_COLOR:
-                rgb_matrix_decrease_hue();
-                break;
-            case LED_SATURATION:
-                rgb_matrix_decrease_sat();
-                break;
-            case LED_MODE:
-                break;
-        }
-    }
-}
-
-void reset_oled_timeout(void) {
-    timeout_timer = timer_read32();
-    timed_out = false;
-    set_timeout_msg data = {timed_out};
-    transaction_rpc_send(SET_TIMEOUT, sizeof(data), &data);
-}
 
 bool encoder_update_user(uint8_t index, bool clockwise) {
     reset_oled_timeout();
@@ -244,95 +133,7 @@ bool encoder_update_user(uint8_t index, bool clockwise) {
 
 
 
-void update_right_display_mode(void) {
-    if (is_keyboard_master()) {
-        return;
-    }
 
-    static const char PROGMEM arrows[] = {
-        // 'arrows', 14x14px
-        0xfc, 0x02, 0x11, 0x11, 0x91, 0x11, 0x11, 0x11, 0x11, 0x7d, 0x39, 0x11, 0x02, 0xfc, 0x0f, 0x10,
-        0x22, 0x27, 0x2f, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x10, 0x0f
-    };
-
-    static const char PROGMEM arrows_inv[] = {
-        // 'arrows_inv', 14x14px
-        0xfc, 0xfe, 0xef, 0xef, 0x6f, 0xef, 0xef, 0xef, 0xef, 0x83, 0xc7, 0xef, 0xfe, 0xfc, 0x0f, 0x1f,
-        0x3d, 0x38, 0x30, 0x3d, 0x3d, 0x3d, 0x3d, 0x3d, 0x3d, 0x3d, 0x1f, 0x0f
-    };
-
-    static const char PROGMEM scroll[] = {
-        // 'scroll', 14x14px
-        0xfc, 0x02, 0x01, 0x01, 0x11, 0x19, 0xfd, 0xfd, 0x19, 0x11, 0x01, 0x01, 0x02, 0xfc, 0x0f, 0x10,
-        0x20, 0x20, 0x22, 0x26, 0x2f, 0x2f, 0x26, 0x22, 0x20, 0x20, 0x10, 0x0f
-    };
-
-    static const char PROGMEM scroll_inv[] = {
-        // 'scroll_inv', 14x14px
-        0xfc, 0xfe, 0xff, 0xff, 0xef, 0xe7, 0x03, 0x03, 0xe7, 0xef, 0xff, 0xff, 0xfe, 0xfc, 0x0f, 0x1f,
-        0x3f, 0x3f, 0x3d, 0x39, 0x30, 0x30, 0x39, 0x3d, 0x3f, 0x3f, 0x1f, 0x0f
-    };
-
-    static const char PROGMEM zoom[] = {
-        // 'lupe', 14x14px
-        0xfc, 0x02, 0x71, 0x89, 0x05, 0x05, 0x05, 0x89, 0x71, 0x01, 0x01, 0x01, 0x02, 0xfc, 0x0f, 0x10,
-        0x20, 0x20, 0x21, 0x21, 0x21, 0x20, 0x21, 0x22, 0x24, 0x20, 0x10, 0x0f
-    };
-
-    static const char PROGMEM zoom_inv[] = {
-        // 'lupe_inv', 14x14px
-        0xfc, 0xfe, 0x8f, 0x77, 0xfb, 0xfb, 0xfb, 0x77, 0x8f, 0xff, 0xff, 0xff, 0xfe, 0xfc, 0x0f, 0x1f,
-        0x3f, 0x3f, 0x3e, 0x3e, 0x3e, 0x3f, 0x3e, 0x3d, 0x3b, 0x3f, 0x1f, 0x0f
-    };
-
-    static const char PROGMEM brightness[] = {
-        // 'bright', 14x14px
-        0xfc, 0x02, 0x11, 0x21, 0x01, 0xcd, 0xe1, 0xe1, 0xc9, 0x05, 0x21, 0x21, 0x02, 0xfc, 0x0f, 0x10,
-        0x21, 0x21, 0x28, 0x24, 0x21, 0x21, 0x2c, 0x20, 0x21, 0x22, 0x10, 0x0f,
-    };
-
-    static const char PROGMEM brightness_inv[] = {
-        // 'bright_inv', 14x14px
-    0xfc, 0xfe, 0xef, 0xdf, 0xff, 0x33, 0x1f, 0x1f, 0x37, 0xfb, 0xdf, 0xdf, 0xfe, 0xfc, 0x0f, 0x1f,
-    0x3e, 0x3e, 0x37, 0x3b, 0x3e, 0x3e, 0x33, 0x3f, 0x3e, 0x3d, 0x1f, 0x0f
-    };
-
-    oled_clear();
-    oled_write_ln("MODE", false);
-
-    oled_set_cursor(0, 2);
-    oled_write_raw_P(enc_mode == HISTORY ? arrows_inv : arrows, 14);
-    oled_set_cursor(3, 2);
-    oled_write_raw_P(enc_mode == SCROLL ? scroll_inv : scroll, 14);
-    oled_set_cursor(0, 3);
-    oled_write_raw_P((enc_mode == HISTORY ? arrows_inv : arrows)+14, 14);
-    oled_set_cursor(3, 3);
-    oled_write_raw_P((enc_mode == SCROLL ? scroll_inv : scroll)+14, 14);
-
-    oled_set_cursor(0, 4);
-    oled_write_raw_P(enc_mode == ZOOM ? zoom_inv : zoom, 14);
-    oled_set_cursor(3, 4);
-    oled_write_raw_P(enc_mode == BRIGHTNESS ? brightness_inv : brightness, 14);
-    oled_set_cursor(0, 5);
-    oled_write_raw_P((enc_mode == ZOOM ? zoom_inv : zoom)+14, 14);
-    oled_set_cursor(3, 5);
-    oled_write_raw_P((enc_mode == BRIGHTNESS ? brightness_inv : brightness)+14, 14);
-
-    oled_render_dirty(true);
-}
-
-void update_right_display_setting(void) {
-    if (is_keyboard_master()) {
-        return;
-    }
-    oled_clear();
-    oled_write_ln("SETT", false);
-    oled_write_ln("", false);
-
-    for (int i = 0; i < setting_count; i++) {
-        oled_write_ln(encoder_settings[i], enc_setting == i);
-    }
-}
 
 
 /**********************************************************/
@@ -448,48 +249,8 @@ bool oled_task_user(void) {
     return false;
 }
 
-void change_encoder_mode(bool switch_modes) {
-    if (switch_modes) {
-        using_modes = !using_modes;
-        enc_mode_msg data = {using_modes, enc_mode, enc_setting};
-        transaction_rpc_send(ENC_MODE, sizeof(data), &data);
-        return;
-    }
 
-    if (using_modes) {
-        enc_mode += 1;
-        enc_mode %= 4;
-        update_right_display_mode();
-    } else {
-        enc_setting += 1;
-        enc_setting %= setting_count;
-        update_right_display_setting();
-    }
 
-    enc_mode_msg data = {using_modes, enc_mode, enc_setting};
-    transaction_rpc_send(ENC_MODE, sizeof(data), &data);
-}
-
-void update_enc_display_rpc(uint8_t buf_len, const void* in_data, uint8_t out_buflen, void* out_data) {
-    const enc_mode_msg *data = (const enc_mode_msg*) in_data;
-    using_modes = data->using_mode;
-    enc_mode = data->mode;
-    enc_setting = data->setting;
-    if (data->using_mode) {
-        update_right_display_mode();
-    } else {
-        update_right_display_setting();
-    }
-}
-
-void set_timeout_rpc(uint8_t buf_len, const void* in_data, uint8_t out_buflen, void* out_data) {
-    const set_timeout_msg *data = (const set_timeout_msg*) in_data;
-    timed_out = data->timeout;
-
-    if (timed_out) {
-        oled_clear();
-    }
-}
 
 /*
     Called whenever a key is pressed or released. Handles OS switches and delegates to other
@@ -547,14 +308,6 @@ void keyboard_post_init_user(void) {
 
 void housekeeping_task_user(void) {
     if (is_keyboard_master()) {
-        if (timed_out) {
-            return;
-        }
-        if (timer_elapsed32(timeout_timer) > TIMEOUT_SECONDS * 1000) {
-            oled_clear();
-            timed_out = true;
-            set_timeout_msg data = {timed_out};
-            transaction_rpc_send(SET_TIMEOUT, sizeof(data), &data);
-        }
+        check_oled_timeout();
     }
 }

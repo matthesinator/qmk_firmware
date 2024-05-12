@@ -1,6 +1,10 @@
 #include QMK_KEYBOARD_H
+#include "transactions.h"
+#include <timer.h>
+#include "oled.h"
+#include "encoder.h"
 
-void update_left_display(void) {
+void update_left_display() {
     if (!is_keyboard_master()) {
         return;
     }
@@ -101,7 +105,7 @@ void update_left_display(void) {
     oled_set_cursor(3, 11);
     oled_write_raw_P((led_usb_state.num_lock ? num_inv : num) + 14, 14);
 
-        static const char PROGMEM default_layer[] = {
+    static const char PROGMEM default_layer[] = {
         0x20, 0x94, 0x95, 0x96, 0x20,
         0x20, 0xb4, 0xb5, 0xb6, 0x20,
         0x20, 0xd4, 0xd5, 0xd6, 0x20, 0};
@@ -135,4 +139,122 @@ void update_left_display(void) {
     }
 
     oled_render_dirty(true);
+}
+
+void update_right_display_mode() {
+    if (is_keyboard_master()) {
+        return;
+    }
+
+    static const char PROGMEM arrows[] = {
+        // 'arrows', 14x14px
+        0xfc, 0x02, 0x11, 0x11, 0x91, 0x11, 0x11, 0x11, 0x11, 0x7d, 0x39, 0x11, 0x02, 0xfc, 0x0f, 0x10,
+        0x22, 0x27, 0x2f, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x10, 0x0f
+    };
+
+    static const char PROGMEM arrows_inv[] = {
+        // 'arrows_inv', 14x14px
+        0xfc, 0xfe, 0xef, 0xef, 0x6f, 0xef, 0xef, 0xef, 0xef, 0x83, 0xc7, 0xef, 0xfe, 0xfc, 0x0f, 0x1f,
+        0x3d, 0x38, 0x30, 0x3d, 0x3d, 0x3d, 0x3d, 0x3d, 0x3d, 0x3d, 0x1f, 0x0f
+    };
+
+    static const char PROGMEM scroll[] = {
+        // 'scroll', 14x14px
+        0xfc, 0x02, 0x01, 0x01, 0x11, 0x19, 0xfd, 0xfd, 0x19, 0x11, 0x01, 0x01, 0x02, 0xfc, 0x0f, 0x10,
+        0x20, 0x20, 0x22, 0x26, 0x2f, 0x2f, 0x26, 0x22, 0x20, 0x20, 0x10, 0x0f
+    };
+
+    static const char PROGMEM scroll_inv[] = {
+        // 'scroll_inv', 14x14px
+        0xfc, 0xfe, 0xff, 0xff, 0xef, 0xe7, 0x03, 0x03, 0xe7, 0xef, 0xff, 0xff, 0xfe, 0xfc, 0x0f, 0x1f,
+        0x3f, 0x3f, 0x3d, 0x39, 0x30, 0x30, 0x39, 0x3d, 0x3f, 0x3f, 0x1f, 0x0f
+    };
+
+    static const char PROGMEM zoom[] = {
+        // 'lupe', 14x14px
+        0xfc, 0x02, 0x71, 0x89, 0x05, 0x05, 0x05, 0x89, 0x71, 0x01, 0x01, 0x01, 0x02, 0xfc, 0x0f, 0x10,
+        0x20, 0x20, 0x21, 0x21, 0x21, 0x20, 0x21, 0x22, 0x24, 0x20, 0x10, 0x0f
+    };
+
+    static const char PROGMEM zoom_inv[] = {
+        // 'lupe_inv', 14x14px
+        0xfc, 0xfe, 0x8f, 0x77, 0xfb, 0xfb, 0xfb, 0x77, 0x8f, 0xff, 0xff, 0xff, 0xfe, 0xfc, 0x0f, 0x1f,
+        0x3f, 0x3f, 0x3e, 0x3e, 0x3e, 0x3f, 0x3e, 0x3d, 0x3b, 0x3f, 0x1f, 0x0f
+    };
+
+    static const char PROGMEM brightness[] = {
+        // 'bright', 14x14px
+        0xfc, 0x02, 0x11, 0x21, 0x01, 0xcd, 0xe1, 0xe1, 0xc9, 0x05, 0x21, 0x21, 0x02, 0xfc, 0x0f, 0x10,
+        0x21, 0x21, 0x28, 0x24, 0x21, 0x21, 0x2c, 0x20, 0x21, 0x22, 0x10, 0x0f,
+    };
+
+    static const char PROGMEM brightness_inv[] = {
+        // 'bright_inv', 14x14px
+    0xfc, 0xfe, 0xef, 0xdf, 0xff, 0x33, 0x1f, 0x1f, 0x37, 0xfb, 0xdf, 0xdf, 0xfe, 0xfc, 0x0f, 0x1f,
+    0x3e, 0x3e, 0x37, 0x3b, 0x3e, 0x3e, 0x33, 0x3f, 0x3e, 0x3d, 0x1f, 0x0f
+    };
+
+    oled_clear();
+    oled_write_ln("MODE", false);
+
+    oled_set_cursor(0, 2);
+    oled_write_raw_P(enc_mode == HISTORY ? arrows_inv : arrows, 14);
+    oled_set_cursor(3, 2);
+    oled_write_raw_P(enc_mode == SCROLL ? scroll_inv : scroll, 14);
+    oled_set_cursor(0, 3);
+    oled_write_raw_P((enc_mode == HISTORY ? arrows_inv : arrows)+14, 14);
+    oled_set_cursor(3, 3);
+    oled_write_raw_P((enc_mode == SCROLL ? scroll_inv : scroll)+14, 14);
+
+    oled_set_cursor(0, 4);
+    oled_write_raw_P(enc_mode == ZOOM ? zoom_inv : zoom, 14);
+    oled_set_cursor(3, 4);
+    oled_write_raw_P(enc_mode == BRIGHTNESS ? brightness_inv : brightness, 14);
+    oled_set_cursor(0, 5);
+    oled_write_raw_P((enc_mode == ZOOM ? zoom_inv : zoom)+14, 14);
+    oled_set_cursor(3, 5);
+    oled_write_raw_P((enc_mode == BRIGHTNESS ? brightness_inv : brightness)+14, 14);
+
+    oled_render_dirty(true);
+}
+
+void update_right_display_setting() {
+    if (is_keyboard_master()) {
+        return;
+    }
+    oled_clear();
+    oled_write_ln("SETT", false);
+    oled_write_ln("", false);
+
+    for (int i = 0; i < setting_count; i++) {
+        oled_write_ln(encoder_settings[i], enc_setting == i);
+    }
+}
+
+void reset_oled_timeout() {
+    timeout_timer = timer_read32();
+    timed_out = false;
+    set_timeout_msg data = {timed_out};
+    transaction_rpc_send(SET_TIMEOUT, sizeof(data), &data);
+}
+
+void set_timeout_rpc(uint8_t buf_len, const void* in_data, uint8_t out_buflen, void* out_data) {
+    const set_timeout_msg *data = (const set_timeout_msg*) in_data;
+    timed_out = data->timeout;
+
+    if (timed_out) {
+        oled_clear();
+    }
+}
+
+void check_oled_timeout() {
+    if (timed_out) {
+        return;
+    }
+    if (timer_elapsed32(timeout_timer) > TIMEOUT_SECONDS * 1000) {
+        oled_clear();
+        timed_out = true;
+        set_timeout_msg data = {timed_out};
+        transaction_rpc_send(SET_TIMEOUT, sizeof(data), &data);
+    }
 }
