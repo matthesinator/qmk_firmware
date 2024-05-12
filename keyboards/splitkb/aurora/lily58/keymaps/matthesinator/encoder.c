@@ -1,7 +1,15 @@
 #include QMK_KEYBOARD_H
 #include "transactions.h"
 #include "encoder.h"
-#include "oled.c"
+#include "oled.h"
+
+const char* encoder_settings[] = {"Tgl", "Brig", "Clr", "Sat", "Mode"};
+
+enum encoder_mode enc_mode = HISTORY;
+enum encoder_setting enc_setting = LED_STATE;
+bool using_modes = true;
+int setting_count = sizeof(encoder_settings) / sizeof(encoder_settings[0]);
+uint16_t press_time = 0;
 
 void encoder_update_mode(bool clockwise) {
     if (clockwise) {

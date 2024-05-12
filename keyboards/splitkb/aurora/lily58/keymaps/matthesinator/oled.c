@@ -4,6 +4,9 @@
 #include "oled.h"
 #include "encoder.h"
 
+uint32_t timeout_timer;
+bool timed_out = false;
+
 void update_left_display() {
     if (!is_keyboard_master()) {
         return;

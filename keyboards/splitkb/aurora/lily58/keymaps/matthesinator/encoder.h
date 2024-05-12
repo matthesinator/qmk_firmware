@@ -19,19 +19,18 @@ enum encoder_setting {
     LED_MODE,
 };
 
-const char* encoder_settings[] = {"Tgl", "Brig", "Clr", "Sat", "Mode"};
-
-enum encoder_mode enc_mode = HISTORY;
-enum encoder_setting enc_setting = LED_STATE;
-bool using_modes = true;
-int setting_count = sizeof(encoder_settings) / sizeof(encoder_settings[0]);
-uint16_t press_time = 0;
-
 typedef struct _enc_mode_msg {
     bool using_mode;
     enum encoder_mode mode;
     enum encoder_setting setting;
 } enc_mode_msg;
+
+extern enum encoder_mode enc_mode;
+extern enum encoder_setting enc_setting;
+extern bool using_modes;
+extern uint16_t press_time;
+extern const char* encoder_settings[];
+extern int setting_count;
 
 
 void encoder_update_mode(bool clockwise);

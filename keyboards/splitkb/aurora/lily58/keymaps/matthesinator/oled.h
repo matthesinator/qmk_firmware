@@ -3,12 +3,12 @@
 
 #define TIMEOUT_SECONDS 10
 
-static uint32_t timeout_timer;
-static bool timed_out = false;
-
 typedef struct _set_timeout_msg {
     bool timeout;
 } set_timeout_msg;
+
+extern uint32_t timeout_timer;
+extern bool timed_out;
 
 void update_left_display(void);
 void update_right_display_mode(void);
